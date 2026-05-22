@@ -1,0 +1,9 @@
+{
+  "source_folder": "C:\\Users\\YOU\\OldPath\\MyProject",
+  "destination_folder": "C:\\Users\\YOU\\NewPath\\MyProject",
+  "old_workspace_hash": "paste-from-find-workspace-hash-ps1",
+  "new_workspace_hash": "paste-after-opening-destination-once",
+  "old_project_slug": "c-Users-YOU-OldPath-MyProject",
+  "new_project_slug": "c-Users-YOU-NewPath-MyProject",
+  "destination_folder_uri": "file:///c%3A/Users/YOU/NewPath/MyProject"
+}

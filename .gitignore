@@ -1,0 +1,5 @@
+migration.config.json
+*.log
+.env
+__pycache__/
+.DS_Store
