@@ -1,5 +1,7 @@
 # Full migration procedure
 
+> **Faster alternative:** use the agent-assisted flow in [RUNBOOK.md](RUNBOOK.md) with `auto-migrate.ps1` (auto-detects hashes/slugs, supports `-DryRun`, includes E2E verification). The steps below are the original manual config-driven procedure.
+
 ## Prerequisites
 
 - **Cursor >= 2.1.42** (hook behavior; chat metadata format may change in older builds)

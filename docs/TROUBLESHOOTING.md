@@ -33,6 +33,30 @@ Ensure **Cursor >= 2.1.42**. Older builds may ignore hook JSON responses ([Curso
 2. Restore `workspaceStorage/<new-hash>` from `*.bak-chat-*` or `*.bak-meta-*`.
 3. Re-open the **old** source folder temporarily — UI history reappears for that hash.
 
+## Parity check fails on `.cursor/plans/*.plan.md` only
+
+**Symptom:** `parity-check.ps1` or `verify-migration.ps1` reports a single hash mismatch on a file under `.cursor/plans/`.
+
+**Cause:** Agent planning sessions edit plan files in the source workspace while migration is in progress. This is a live artifact, not lost project data.
+
+**Fix:** Use `-ExcludeVolatile` (enabled by default in `verify-migration.ps1`). Re-run parity — all other files should match.
+
+## Ghost thread count = 1 after reopening destination
+
+**Symptom:** `verify-migration.ps1` reports `ghosts=1` on the new workspace.
+
+**Cause:** Cursor creates a fresh unnamed "New Chat" tab when you open the destination folder. This is normal post-open behavior.
+
+**Verdict:** Benign (soft check). Confirm all **named** threads have correct titles and transcript count matches.
+
+## Slug mismatch for paths with non-ASCII characters
+
+**Symptom:** `auto-migrate.ps1` cannot find the expected project slug for a destination path containing characters like `ł`, `ą`, `ę`.
+
+**Cause:** Cursor converts non-ASCII characters to hyphens in slug names (e.g. `Własne` → `W-asne`).
+
+**Fix:** Check actual slug under `%USERPROFILE%\.cursor\projects\` and compare with `find-workspace-hash.ps1` output. The auto-migrate script scans by folder basename as fallback.
+
 ## Community references
 
 - Cursor forum: workspace moves and chat history (search "workspaceStorage" / "composerHeaders")

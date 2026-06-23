@@ -17,7 +17,25 @@ Cursor stores project-related data in **three separate places**:
 
 Copying files alone is **not enough**. Renaming only `.cursor/projects/...` is **not enough**.
 
-## Quick start (Windows)
+## Agent-assisted quick path (recommended)
+
+For automated hash/slug detection, dry-run, and E2E verification — see **[docs/RUNBOOK.md](docs/RUNBOOK.md)**.
+
+```powershell
+# Phase A (agent): copy files, then:
+.\scripts\parity-check.ps1 -Source "C:\old\path" -Dest "C:\new\path" -ExcludeVolatile
+.\scripts\auto-migrate.ps1 -Source "C:\old\path" -Destination "C:\new\path" -DryRun
+
+# Phase B (you, Cursor quit): open dest once, quit, then:
+.\scripts\auto-migrate.ps1 -Source "C:\old\path" -Destination "C:\new\path"
+
+# Phase C (agent):
+.\scripts\verify-migration.ps1 -Source "C:\old\path" -Destination "C:\new\path"
+```
+
+Cursor assets in this repo: `.cursor/skills/cursor-workspace-migration/` (skill) and `.cursor/agents/workspace-migrator.md` (subagent).
+
+## Quick start — manual config (Windows)
 
 1. **Quit Cursor** completely (File → Exit).
 2. Copy `migration.config.example.json` → `migration.config.json` and fill in paths + workspace hashes (use `scripts/find-workspace-hash.ps1`).
@@ -29,7 +47,8 @@ Copying files alone is **not enough**. Renaming only `.cursor/projects/...` is *
 
 ## Documentation
 
-- [docs/MIGRATION.md](docs/MIGRATION.md) — full step-by-step procedure
+- [docs/RUNBOOK.md](docs/RUNBOOK.md) — **agent-assisted migration** (recommended, with case study)
+- [docs/MIGRATION.md](docs/MIGRATION.md) — full manual step-by-step procedure
 - [docs/INDEXING.md](docs/INDEXING.md) — claude-context / CodeGraph after path change
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — empty chats, wrong titles, version issues
 
@@ -37,10 +56,15 @@ Copying files alone is **not enough**. Renaming only `.cursor/projects/...` is *
 
 | Script | Purpose |
 |--------|---------|
+| `auto-migrate.ps1` | **Auto-detect** hashes/slugs, copy slug + remap metadata (`-DryRun` supported) |
+| `verify-migration.ps1` | **E2E verification** with confidence score after migration |
+| `parity-check.ps1` | sha256 file parity (`-ExcludeVolatile` for planning artifacts) |
+| `remap-cursor-meta.py` | Remap `composer.composerHeaders` (called by auto-migrate) |
+| `count-threads.py` | Count threads/ghosts per workspace hash |
 | `find-workspace-hash.ps1` | List `workspaceStorage` hash ↔ folder path |
-| `migrate-workspace.ps1` | Copy project files + rename `.cursor/projects` slug |
-| `migrate-chats.ps1` | Copy `workspaceStorage` state DB (chat list UI) |
-| `fix-chat-metadata.py` | Remap `composer.composerHeaders` + full workspace sync |
+| `migrate-workspace.ps1` | Copy project files + rename `.cursor/projects` slug (manual flow) |
+| `migrate-chats.ps1` | Copy `workspaceStorage` state DB (manual flow) |
+| `fix-chat-metadata.py` | Remap headers via `migration.config.json` (manual flow) |
 
 ## Security
 
