@@ -55,7 +55,10 @@ function Encode-FolderUri {
     # (lowercase drive, ':' as %3A, '/' kept, each segment percent-encoded)
     $p = $Path.TrimEnd('\') -replace '\\', '/'
     if ($p -match '^([A-Za-z]):(.*)$') { $p = $Matches[1].ToLowerInvariant() + ':' + $Matches[2] }
-    $segments = $p -split '/' | ForEach-Object { [uri]::EscapeDataString($_) }
+    $segments = $p -split '/' | ForEach-Object {
+        # .NET Framework (Windows PowerShell 5.1) leaves !'()* as-is; Cursor escapes them
+        [uri]::EscapeDataString($_).Replace('!', '%21').Replace("'", '%27').Replace('(', '%28').Replace(')', '%29').Replace('*', '%2A')
+    }
     return "file:///" + ($segments -join '/')
 }
 

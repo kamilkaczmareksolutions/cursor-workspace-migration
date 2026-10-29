@@ -49,6 +49,7 @@ Describe "Encode-FolderUri" {
         @{ Path = 'C:\cwm-test\b\app';          Expected = 'file:///c%3A/cwm-test/b/app' }
         @{ Path = 'D:\b\app\';                  Expected = 'file:///d%3A/b/app' }
         @{ Path = 'C:\x\New folder (51)';        Expected = 'file:///c%3A/x/New%20folder%20%2851%29' }
+        @{ Path = "C:\x\it's done!*";            Expected = 'file:///c%3A/x/it%27s%20done%21%2A' }
         @{ Path = 'C:\Users\YOU\Własne\my.app'; Expected = 'file:///c%3A/Users/YOU/W%C5%82asne/my.app' }
     ) {
         Encode-FolderUri $Path | Should -BeExactly $Expected
@@ -166,6 +167,8 @@ Describe "auto-migrate.ps1 -DryRun end to end" {
         try {
             $env:USERPROFILE = $home_
             $env:APPDATA = Join-Path $TestDrive "e2e-appdata"
+            # Windows PowerShell 5.1 turns the child's stderr into terminating errors under Stop
+            $ErrorActionPreference = 'Continue'
             $out = & $pwshExe -NoProfile -File $AutoMigrate -Source $app -Destination $app -DryRun 2>&1 | Out-String
         } finally {
             $env:USERPROFILE, $env:APPDATA = $saved
