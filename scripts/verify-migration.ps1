@@ -66,13 +66,19 @@ function Get-ExpectedSlug {
         $drive = $Matches[1].ToLower()
         $rest = $Matches[2]
     } else { return $null }
-    $rest = $rest -replace '\\', '-'
+    $rest = $rest -replace '[\\.]', '-'
     $rest = $rest -replace '\s+', '-'
     $rest = $rest -replace '[()]', ''
     $rest = [regex]::Replace($rest, '[^\x00-\x7F]', '-')
     $rest = $rest -replace '--+', '-'
     $rest = $rest.Trim('-')
     return "$drive-$rest"
+}
+
+function Get-SlugKey {
+    param([string]$Text)
+    # Lowercase; every run of non-alphanumerics becomes one hyphen
+    return ([regex]::Replace($Text.ToLowerInvariant(), '[^a-z0-9]+', '-')).Trim('-')
 }
 
 function Count-Threads {
@@ -181,16 +187,17 @@ $oldTranscriptDir = Join-Path $projectsRoot "$oldSlug\agent-transcripts"
 $newTranscriptDir = Join-Path $projectsRoot "$newSlug\agent-transcripts"
 
 if (-not (Test-Path $newTranscriptDir)) {
-    $basename = Split-Path $Dest -Leaf
-    Get-ChildItem $projectsRoot -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -like "*$basename*" } |
-        ForEach-Object {
-            $alt = Join-Path $_.FullName "agent-transcripts"
-            if (Test-Path $alt) {
-                $script:newTranscriptDir = $alt
-                $script:newSlug = $_.Name
-            }
+    # Match the FULL destination path, never just the basename (could hit the old slug)
+    $destKey = Get-SlugKey $Dest
+    $found = @(Get-ChildItem $projectsRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { (Get-SlugKey $_.Name) -eq $destKey })
+    if ($found.Count -eq 1) {
+        $alt = Join-Path $found[0].FullName "agent-transcripts"
+        if (Test-Path $alt) {
+            $newTranscriptDir = $alt
+            $newSlug = $found[0].Name
         }
+    }
 }
 
 $oldN = if (Test-Path $oldTranscriptDir) {

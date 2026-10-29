@@ -55,7 +55,7 @@ Ensure **Cursor >= 2.1.42**. Older builds may ignore hook JSON responses ([Curso
 
 **Cause:** Cursor converts non-ASCII characters to hyphens in slug names (e.g. `Własne` → `W-asne`).
 
-**Fix:** Check actual slug under `%USERPROFILE%\.cursor\projects\` and compare with `find-workspace-hash.ps1` output. The auto-migrate script scans by folder basename as fallback.
+**Fix:** Check actual slug under `%USERPROFILE%\.cursor\projects\` and compare with `find-workspace-hash.ps1` output. If the predicted slug is not on disk, the auto-migrate script falls back to a slug that matches the full path with punctuation ignored (never just the folder name).
 
 ## Community references
 

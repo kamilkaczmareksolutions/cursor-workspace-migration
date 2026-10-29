@@ -80,7 +80,7 @@ It's a move, not a copy: after the migration the threads appear under the new fo
 - **Open the destination once first.** If Cursor hasn't created a workspace hash for the new path yet, the script stops with `new workspace hash not found`.
 - **It edits Cursor's internal SQLite databases.** The key layout isn't a public API. The scripts were tested on Cursor 3.x and need Cursor >= 2.1.42. A future Cursor update could change the format.
 - **Doesn't copy your project files** (use `robocopy` as above) and doesn't re-index semantic search tools. See [INDEXING.md](docs/INDEXING.md).
-- **Check the dry run** before the real run: the detected hashes and the `new project slug` should match your destination.
+- **Check the dry run** before the real run: the detected hashes and both project slugs should match your source and destination. The script stops before touching anything if source and destination, or their slugs, are the same.
 
 **Backups.** Before every write, the scripts make timestamped copies: `globalStorage\state.vscdb.bak-meta-<timestamp>`, `workspaceStorage\<new-hash>.bak-meta-<timestamp>` (when it already exists), and `.cursor\projects\<new-slug>.bak-<timestamp>` (when it already exists). Keep the source folder until you've checked the result. For extra safety, back up `%APPDATA%\Cursor\User\` yourself before the first run. Rollback steps are in [RUNBOOK.md](docs/RUNBOOK.md#rollback).
 
@@ -119,6 +119,8 @@ No. Everything runs locally with PowerShell and the Python standard library. The
 | `migrate-workspace.ps1` | Manual flow: copy files and rename the projects slug |
 | `migrate-chats.ps1` | Manual flow: copy the `workspaceStorage` state DB |
 | `fix-chat-metadata.py` | Manual flow: remap headers using `migration.config.json` |
+
+Tests: `Invoke-Pester ./tests` (Pester 5+).
 
 </details>
 
