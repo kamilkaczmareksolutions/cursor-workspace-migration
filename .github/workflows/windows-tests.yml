@@ -1,0 +1,62 @@
+name: windows-tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: ${{ matrix.shell == 'powershell' && 'Windows PowerShell 5.1' || 'PowerShell 7 (pwsh)' }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: PowerShell version
+        run: $PSVersionTable | Format-Table -AutoSize | Out-String -Width 200
+
+      - name: Install Pester 5
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $have = Get-Module -ListAvailable Pester | Where-Object { $_.Version -ge [version]'5.5.0' }
+          if (-not $have) {
+            Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          }
+          Get-Module -ListAvailable Pester | Format-Table Name, Version, Path -AutoSize
+
+      - name: Python unit tests (remap-cursor-meta.py)
+        run: |
+          # unittest reports on stderr; keep 5.1 from treating that as an error
+          $ErrorActionPreference = 'Continue'
+          python -m unittest discover -s tests -p "test_*.py" -v 2>&1 | ForEach-Object { "$_" }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Pester (tests/project-slug.Tests.ps1)
+        run: |
+          Import-Module Pester -MinimumVersion 5.5.0
+          Write-Host "PowerShell $($PSVersionTable.PSVersion), Pester $((Get-Module Pester).Version)"
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = 'tests/project-slug.Tests.ps1'
+          $cfg.Run.Exit = $true
+          $cfg.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $cfg
+
+      - name: E2E migration on real Windows paths (fake Cursor data)
+        env:
+          APPDATA: C:\cwm-test\fake\AppData\Roaming
+          USERPROFILE: C:\cwm-test\fake\home
+        run: ./tests/e2e/Invoke-WindowsE2E.ps1

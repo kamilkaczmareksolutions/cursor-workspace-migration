@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Auto-detect workspace hashes/slugs and migrate Cursor chat metadata after folder move.
@@ -51,9 +51,15 @@ $DestFolder = $DestFolder.TrimEnd('\')
 
 function Encode-FolderUri {
     param([string]$Path)
-    $normalized = $Path -replace '\\', '/'
-    $encoded = [uri]::EscapeDataString($normalized).Replace('%3A', ':')
-    return "file:///$encoded"
+    # Same form Cursor writes to workspace.json: file:///c%3A/Users/me/My%20App
+    # (lowercase drive, ':' as %3A, '/' kept, each segment percent-encoded)
+    $p = $Path.TrimEnd('\') -replace '\\', '/'
+    if ($p -match '^([A-Za-z]):(.*)$') { $p = $Matches[1].ToLowerInvariant() + ':' + $Matches[2] }
+    $segments = $p -split '/' | ForEach-Object {
+        # .NET Framework (Windows PowerShell 5.1) leaves !'()* as-is; Cursor escapes them
+        [uri]::EscapeDataString($_).Replace('!', '%21').Replace("'", '%27').Replace('(', '%28').Replace(')', '%29').Replace('*', '%2A')
+    }
+    return "file:///" + ($segments -join '/')
 }
 
 function Normalize-FsPath {
@@ -95,7 +101,7 @@ function Get-ExpectedSlug {
     } else {
         return $null
     }
-    $rest = $rest -replace '\\', '-'
+    $rest = $rest -replace '[\\.]', '-'
     $rest = $rest -replace '\s+', '-'
     $rest = $rest -replace '[()]', ''
     # Non-ASCII chars (e.g. Polish ł in Własne -> W-asne) become hyphen
@@ -103,6 +109,13 @@ function Get-ExpectedSlug {
     $rest = $rest -replace '--+', '-'
     $rest = $rest.Trim('-')
     return "$drive-$rest"
+}
+
+function Get-SlugKey {
+    param([string]$Text)
+    # Lowercase; every run of non-alphanumerics becomes one hyphen.
+    # Compares a full path to a slug while tolerating punctuation rules.
+    return ([regex]::Replace($Text.ToLowerInvariant(), '[^a-z0-9]+', '-')).Trim('-')
 }
 
 function Find-ProjectSlug {
@@ -114,12 +127,39 @@ function Find-ProjectSlug {
         return $expected
     }
 
-    # Fallback: scan slugs whose decoded path ends with the folder basename
-    $basename = Split-Path $FolderPath -Leaf
-    foreach ($dir in Get-ChildItem $projectsRoot -Directory -ErrorAction SilentlyContinue) {
-        if ($dir.Name -like "*$basename*") { return $dir.Name }
-    }
+    # Fallback: match the FULL path, never just the basename
+    # (C:\a\app and D:\b\app share a basename but not a slug)
+    $key = Get-SlugKey $FolderPath
+    $found = @(Get-ChildItem $projectsRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { (Get-SlugKey $_.Name) -eq $key })
+    if ($found.Count -eq 1) { return $found[0].Name }
     return $expected
+}
+
+function Get-SlugState {
+    param([string]$Slug)
+    if (-not $Slug) { return "" }
+    $path = Join-Path $env:USERPROFILE ".cursor\projects\$Slug"
+    if (Test-Path $path) { return " (exists)" }
+    return " (not on disk yet)"
+}
+
+function Assert-DistinctTargets {
+    param(
+        [string]$SourceFolder,
+        [string]$DestFolder,
+        [string]$OldSlug,
+        [string]$NewSlug
+    )
+    if ($SourceFolder.TrimEnd('\') -ieq $DestFolder.TrimEnd('\')) {
+        throw "Source and destination are the same folder: $SourceFolder"
+    }
+    if (-not $NewSlug) {
+        throw "Cannot determine new project slug for: $DestFolder"
+    }
+    if ($OldSlug -ieq $NewSlug) {
+        throw "Old and new project slug are the same ($OldSlug). Refusing to touch .cursor\projects. Check -Source/-Destination."
+    }
 }
 
 function Copy-ProjectSlug {
@@ -179,13 +219,9 @@ Write-Host ""
 Write-Host "Detected:" -ForegroundColor Cyan
 Write-Host "  old workspace hash: $oldWs"
 Write-Host "  new workspace hash: $newWs"
-Write-Host "  old project slug:   $oldSlug"
-Write-Host "  new project slug:   $newSlug"
+Write-Host "  old project slug:   $oldSlug$(Get-SlugState $oldSlug)"
+Write-Host "  new project slug:   $newSlug$(Get-SlugState $newSlug)"
 Write-Host "  dest folder URI:    $destUri"
-
-if (-not $oldWs) {
-    throw "Cannot find workspaceStorage hash for source folder. Open source in Cursor once, then quit."
-}
 
 if (-not $oldSlug) {
     throw "Cannot determine old project slug."
@@ -194,6 +230,13 @@ if (-not $oldSlug) {
 if (-not $newSlug) {
     $newSlug = Get-ExpectedSlug $DestFolder
     Write-Host "  (predicted new slug: $newSlug)"
+}
+
+# Hard stop before any rename/copy: same folder or same slug would clobber the source
+Assert-DistinctTargets -SourceFolder $SourceFolder -DestFolder $DestFolder -OldSlug $oldSlug -NewSlug $newSlug
+
+if (-not $oldWs) {
+    throw "Cannot find workspaceStorage hash for source folder. Open source in Cursor once, then quit."
 }
 
 if ((Test-Path $CountPy) -and $oldWs) {

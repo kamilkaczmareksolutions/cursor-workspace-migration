@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Full E2E verification after workspace migration. Reports confidence score.
@@ -21,13 +21,6 @@ $countPy = Join-Path $ScriptDir "count-threads.py"
 
 $Source = (Resolve-Path $Source).Path.TrimEnd('\')
 $Dest = (Resolve-Path $Destination).Path.TrimEnd('\')
-
-function Encode-FolderUri {
-    param([string]$Path)
-    $normalized = $Path -replace '\\', '/'
-    $encoded = [uri]::EscapeDataString($normalized).Replace('%3A', ':')
-    return "file:///$encoded"
-}
 
 function Normalize-FsPath {
     param([string]$Path)
@@ -59,6 +52,11 @@ function Find-WorkspaceHash {
     return $null
 }
 
+function Test-UriPointsTo {
+    param([string]$Uri, [string]$FolderPath)
+    return ((Normalize-FsPath $Uri) -ieq $FolderPath.TrimEnd('\'))
+}
+
 function Get-ExpectedSlug {
     param([string]$FolderPath)
     $p = $FolderPath.TrimEnd('\')
@@ -66,13 +64,19 @@ function Get-ExpectedSlug {
         $drive = $Matches[1].ToLower()
         $rest = $Matches[2]
     } else { return $null }
-    $rest = $rest -replace '\\', '-'
+    $rest = $rest -replace '[\\.]', '-'
     $rest = $rest -replace '\s+', '-'
     $rest = $rest -replace '[()]', ''
     $rest = [regex]::Replace($rest, '[^\x00-\x7F]', '-')
     $rest = $rest -replace '--+', '-'
     $rest = $rest.Trim('-')
     return "$drive-$rest"
+}
+
+function Get-SlugKey {
+    param([string]$Text)
+    # Lowercase; every run of non-alphanumerics becomes one hyphen
+    return ([regex]::Replace($Text.ToLowerInvariant(), '[^a-z0-9]+', '-')).Trim('-')
 }
 
 function Count-Threads {
@@ -129,8 +133,8 @@ if ($destWs) {
     $wsDb = Join-Path $env:APPDATA "Cursor\User\workspaceStorage\$($destWs.Hash)\state.vscdb"
     Test-Check "workspaceStorage hash exists" $true "hash=$($destWs.Hash)"
     Test-Check "workspace state.vscdb exists" (Test-Path $wsDb) $wsDb
-    $destBasename = Split-Path $Dest -Leaf
-    $uriOk = (Normalize-FsPath $destWs.Uri -ieq $Dest) -or ($destWs.Uri -like "*$destBasename*")
+    # Full-path match only: a basename match would accept C:\a\app for D:\b\app
+    $uriOk = Test-UriPointsTo $destWs.Uri $Dest
     Test-Check "workspace.json points to dest" $uriOk $destWs.Uri
 } else {
     Test-Check "workspaceStorage hash exists" $false "not found for $Dest"
@@ -181,16 +185,17 @@ $oldTranscriptDir = Join-Path $projectsRoot "$oldSlug\agent-transcripts"
 $newTranscriptDir = Join-Path $projectsRoot "$newSlug\agent-transcripts"
 
 if (-not (Test-Path $newTranscriptDir)) {
-    $basename = Split-Path $Dest -Leaf
-    Get-ChildItem $projectsRoot -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -like "*$basename*" } |
-        ForEach-Object {
-            $alt = Join-Path $_.FullName "agent-transcripts"
-            if (Test-Path $alt) {
-                $script:newTranscriptDir = $alt
-                $script:newSlug = $_.Name
-            }
+    # Match the FULL destination path, never just the basename (could hit the old slug)
+    $destKey = Get-SlugKey $Dest
+    $found = @(Get-ChildItem $projectsRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { (Get-SlugKey $_.Name) -eq $destKey })
+    if ($found.Count -eq 1) {
+        $alt = Join-Path $found[0].FullName "agent-transcripts"
+        if (Test-Path $alt) {
+            $newTranscriptDir = $alt
+            $newSlug = $found[0].Name
         }
+    }
 }
 
 $oldN = if (Test-Path $oldTranscriptDir) {

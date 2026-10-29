@@ -64,8 +64,8 @@ Expected: `PASS: N files, sha256+size match 100%`
 
 Expected output includes:
 - `old workspace hash: <32-hex>`
-- `old project slug: c-Users-YOU-Downloads-OldProject`
-- `new project slug: c-Users-YOU-Desktop-Projects-MyProject` (predicted)
+- `old project slug: c-Users-YOU-Downloads-OldProject (exists)`
+- `new project slug: c-Users-YOU-Desktop-Projects-MyProject (not on disk yet)`
 - `threads on old workspace: N`
 - `ERROR: new workspace hash not found` — **normal at this stage** (destination not opened yet)
 
@@ -143,12 +143,15 @@ Cursor derives project slugs from absolute paths:
 |---------------|---------------|
 | `C:\` | `c-` |
 | `\` | `-` |
+| `.` | `-` |
 | spaces | `-` |
 | `(51)` | `51` (parens removed) |
 | `ł` (non-ASCII) | `-` (`Własne` → `W-asne`) |
 | `--` | collapsed to `-` |
 
-Example: `C:\Work\Projekt_Główny\MyApp` → `c-Work-Projekt-G-ówny-MyApp`
+Example: `C:\Users\YOU\Własne Projekty (2)\my.app` → `c-Users-YOU-W-asne-Projekty-2-my-app`
+
+The slug comes from the full path, so `C:\a\app` and `D:\b\app` get different slugs (`c-a-app`, `d-b-app`). `auto-migrate.ps1` refuses to run if source and destination, or their slugs, are the same.
 
 If auto-detection fails, run `scripts/find-workspace-hash.ps1` and check `%USERPROFILE%\.cursor\projects\` manually.
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sqlite3
 import sys
@@ -38,6 +39,17 @@ def uri_from_folder(folder_fs: str, folder_uri: str | None = None) -> dict:
     }
 
 
+def replace_ws_hash(s: str, old_ws: str, new_ws: str) -> str:
+    """Replace the workspace hash only where it stands alone as a token.
+
+    "aaaa" in "ws:aaaa" or "aaaa/x" is replaced; "aaaa" inside "aaaa0f" is not.
+    """
+    if not old_ws or old_ws not in s:
+        return s
+    pattern = r"(?<![0-9A-Za-z])" + re.escape(old_ws) + r"(?![0-9A-Za-z])"
+    return re.sub(pattern, lambda _m: new_ws, s)
+
+
 def replace_paths_in_json(
     obj,
     old_fs: str,
@@ -46,27 +58,27 @@ def replace_paths_in_json(
     new_uri: str,
     old_path: str,
     new_path: str,
+    old_ws: str = "",
+    new_ws: str = "",
 ):
-    if isinstance(obj, str):
-        s = obj
-        s = s.replace(old_fs, new_fs)
-        s = s.replace(old_fs.replace("\\", "/"), new_fs.replace("\\", "/"))
-        if old_uri:
-            s = s.replace(old_uri, new_uri)
-        if old_path:
-            s = s.replace(old_path, new_path)
-        return s
-    if isinstance(obj, list):
-        return [
-            replace_paths_in_json(x, old_fs, new_fs, old_uri, new_uri, old_path, new_path)
-            for x in obj
-        ]
-    if isinstance(obj, dict):
-        return {
-            k: replace_paths_in_json(v, old_fs, new_fs, old_uri, new_uri, old_path, new_path)
-            for k, v in obj.items()
-        }
-    return obj
+    def walk(x):
+        if isinstance(x, str):
+            s = x
+            s = s.replace(old_fs, new_fs)
+            s = s.replace(old_fs.replace("\\", "/"), new_fs.replace("\\", "/"))
+            if old_uri:
+                s = s.replace(old_uri, new_uri)
+            if old_path:
+                s = s.replace(old_path, new_path)
+            return replace_ws_hash(s, old_ws, new_ws)
+        if isinstance(x, list):
+            return [walk(v) for v in x]
+        if isinstance(x, dict):
+            # Keys can carry the hash too (e.g. per-workspace maps)
+            return {replace_ws_hash(k, old_ws, new_ws): walk(v) for k, v in x.items()}
+        return x
+
+    return walk(obj)
 
 
 def fix_global_headers(con, old_ws: str, new_ws: str, new_uri: dict) -> tuple[int, int, int]:
@@ -168,12 +180,13 @@ def patch_workspace_db_paths(
             obj = json.loads(val)
             new_val = json.dumps(
                 replace_paths_in_json(
-                    obj, old_fs, new_fs, old_uri, new_uri, old_path, new_path
+                    obj, old_fs, new_fs, old_uri, new_uri, old_path, new_path,
+                    old_ws, new_ws,
                 ),
                 ensure_ascii=False,
             )
         except json.JSONDecodeError:
-            new_val = val.replace(old_fs, new_fs).replace(old_ws, new_ws)
+            new_val = replace_ws_hash(val.replace(old_fs, new_fs), old_ws, new_ws)
             if old_uri:
                 new_val = new_val.replace(old_uri, new_uri)
         con.execute("UPDATE ItemTable SET value=? WHERE key=?", (new_val, key))
