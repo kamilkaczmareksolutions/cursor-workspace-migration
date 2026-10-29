@@ -1,4 +1,4 @@
-# Pester 5+ tests for project slug detection and the same-target guard.
+﻿# Pester 5+ tests for project slug detection and the same-target guard.
 # Run: Invoke-Pester ./tests
 # Functions are loaded from the scripts via the AST, so the scripts' top-level
 # code (which needs a real Cursor install) never runs.
@@ -41,6 +41,49 @@ Describe "Get-ExpectedSlug" {
             $fromVerify = & { . ([scriptblock]::Create($verifySrc)); Get-ExpectedSlug $p }
             $fromVerify | Should -BeExactly (Get-ExpectedSlug $p)
         }
+    }
+}
+
+Describe "Encode-FolderUri" {
+    It "encodes <Path> the way Cursor writes workspace.json" -ForEach @(
+        @{ Path = 'C:\cwm-test\b\app';          Expected = 'file:///c%3A/cwm-test/b/app' }
+        @{ Path = 'D:\b\app\';                  Expected = 'file:///d%3A/b/app' }
+        @{ Path = 'C:\x\New folder (51)';        Expected = 'file:///c%3A/x/New%20folder%20%2851%29' }
+        @{ Path = 'C:\Users\YOU\Własne\my.app'; Expected = 'file:///c%3A/Users/YOU/W%C5%82asne/my.app' }
+    ) {
+        Encode-FolderUri $Path | Should -BeExactly $Expected
+    }
+
+    It "round-trips through Normalize-FsPath" {
+        foreach ($p in 'C:\cwm-test\b\app', 'C:\x\New folder (51)', 'C:\Users\YOU\Własne\my.app') {
+            Normalize-FsPath (Encode-FolderUri $p) | Should -Be $p
+        }
+    }
+}
+
+Describe "verify-migration.ps1 Test-UriPointsTo" {
+    BeforeAll {
+        . ([scriptblock]::Create((Get-FunctionSource $VerifyMigration)))
+    }
+
+    It "accepts the destination's own URI" {
+        Test-UriPointsTo 'file:///d%3A/b/app' 'D:\b\app' | Should -BeTrue
+    }
+
+    It "rejects a same-named folder under another parent" {
+        Test-UriPointsTo 'file:///c%3A/a/app' 'D:\b\app' | Should -BeFalse
+    }
+}
+
+Describe "Script file encoding" {
+    It "<Name> has a UTF-8 BOM if it contains non-ASCII (Windows PowerShell 5.1 reads BOM-less files as ANSI)" -ForEach @(
+        Get-ChildItem (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts'), $PSScriptRoot -Recurse -Filter *.ps1 |
+            ForEach-Object { @{ Name = $_.Name; FullName = $_.FullName } }
+    ) {
+        $bytes = [System.IO.File]::ReadAllBytes($FullName)
+        $hasBom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+        $nonAscii = @($bytes | Where-Object { $_ -gt 0x7F }).Count -gt 0
+        ($hasBom -or -not $nonAscii) | Should -BeTrue
     }
 }
 

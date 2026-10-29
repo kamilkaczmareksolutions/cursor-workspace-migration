@@ -1,4 +1,4 @@
-# Copy project folder + rename ~/.cursor/projects slug (best-effort).
+﻿# Copy project folder + rename ~/.cursor/projects slug (best-effort).
 # Run ONLY when Cursor is fully quit.
 #Requires -Version 5.1
 param(

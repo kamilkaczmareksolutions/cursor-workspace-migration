@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Auto-detect workspace hashes/slugs and migrate Cursor chat metadata after folder move.
@@ -51,9 +51,12 @@ $DestFolder = $DestFolder.TrimEnd('\')
 
 function Encode-FolderUri {
     param([string]$Path)
-    $normalized = $Path -replace '\\', '/'
-    $encoded = [uri]::EscapeDataString($normalized).Replace('%3A', ':')
-    return "file:///$encoded"
+    # Same form Cursor writes to workspace.json: file:///c%3A/Users/me/My%20App
+    # (lowercase drive, ':' as %3A, '/' kept, each segment percent-encoded)
+    $p = $Path.TrimEnd('\') -replace '\\', '/'
+    if ($p -match '^([A-Za-z]):(.*)$') { $p = $Matches[1].ToLowerInvariant() + ':' + $Matches[2] }
+    $segments = $p -split '/' | ForEach-Object { [uri]::EscapeDataString($_) }
+    return "file:///" + ($segments -join '/')
 }
 
 function Normalize-FsPath {

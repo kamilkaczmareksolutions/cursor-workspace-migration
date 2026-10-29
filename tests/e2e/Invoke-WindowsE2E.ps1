@@ -59,8 +59,11 @@ function Invoke-Script {
 }
 
 function Get-TreeSnapshot {
-    # Every file/dir under C:\cwm-test with a content hash; any write shows up as a diff.
-    Get-ChildItem $Root -Recurse -Force | Sort-Object FullName | ForEach-Object {
+    # Every file/dir of the fake Cursor data and both project folders, with a
+    # content hash; any write shows up as a diff. (The rest of the fake profile
+    # is left out: PowerShell itself writes caches there.)
+    $roots = (Join-Path $env:APPDATA 'Cursor'), (Join-Path $env:USERPROFILE '.cursor'), (Split-Path $Src -Parent), (Split-Path $Dst -Parent)
+    Get-ChildItem $roots -Recurse -Force | Sort-Object FullName | ForEach-Object {
         if ($_.PSIsContainer) { "D $($_.FullName)" }
         else { "F $($_.FullName) $((Get-FileHash $_.FullName -Algorithm SHA256).Hash)" }
     }
@@ -81,7 +84,11 @@ function Get-CursorState {
 
 function Test-SameList {
     param($A, $B)
-    return ((@($A) -join "`n") -ceq (@($B) -join "`n"))
+    $same = ((@($A) -join "`n") -ceq (@($B) -join "`n"))
+    if (-not $same) {
+        Compare-Object @($A) @($B) | ForEach-Object { Write-Host "    diff $($_.SideIndicator) $($_.InputObject)" }
+    }
+    return $same
 }
 
 Write-Host "PowerShell $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition)) at $PsExe"
@@ -108,10 +115,14 @@ $oldSlugManifest = Get-DirManifest $oldSlugDir
 Write-Host "`n=== Case 1: source == destination ===" -ForegroundColor Cyan
 foreach ($sameDst in @($Src, 'c:\CWM-TEST\A\APP\')) {
     $before = Get-TreeSnapshot
+    $allBefore = @(Get-ChildItem $Root -Recurse -Force -File | ForEach-Object FullName)
     $r = Invoke-Script $AutoMigrate @('-Source', $Src, '-Destination', $sameDst)
+    # Informational: files written elsewhere in the fake profile (PowerShell caches)
+    Get-ChildItem $Root -Recurse -Force -File | Where-Object { $_.FullName -notin $allBefore } |
+        ForEach-Object { Write-Host "    (info) new file outside Cursor data: $($_.FullName)" }
     Assert-That "exit code != 0 (dest '$sameDst')" ($r.ExitCode -ne 0) "exit=$($r.ExitCode)"
     Assert-That "error says 'same folder'" ($r.Output -match 'same folder')
-    Assert-That "no file under $Root changed" (Test-SameList $before (Get-TreeSnapshot))
+    Assert-That "no Cursor data or project file changed" (Test-SameList $before (Get-TreeSnapshot))
 }
 
 # --- Case 2: dry run ---------------------------------------------------
@@ -124,7 +135,7 @@ Assert-That "new slug detected as $NewSlug (not on disk yet)" ($r.Output -match 
 Assert-That "old workspace hash detected" ($r.Output -match "old workspace hash:\s+$OldWs")
 Assert-That "new workspace hash detected" ($r.Output -match "new workspace hash:\s+$NewWs")
 Assert-That "plans copy $OldSlug -> $NewSlug" ($r.Output -match "would copy slug $OldSlug -> $NewSlug")
-Assert-That "no file under $Root changed" (Test-SameList $before (Get-TreeSnapshot))
+Assert-That "no Cursor data or project file changed" (Test-SameList $before (Get-TreeSnapshot))
 
 # --- Case 3: real migration ------------------------------------------------
 Write-Host "`n=== Case 3: migrate $Src -> $Dst ===" -ForegroundColor Cyan

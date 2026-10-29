@@ -1,4 +1,4 @@
-# Copy workspaceStorage state DB (chat sidebar UI) from old hash to new hash.
+﻿# Copy workspaceStorage state DB (chat sidebar UI) from old hash to new hash.
 # Requires Cursor to be quit. Destination workspace must exist (open folder once first).
 #Requires -Version 5.1
 param(

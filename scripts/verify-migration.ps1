@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Full E2E verification after workspace migration. Reports confidence score.
@@ -21,13 +21,6 @@ $countPy = Join-Path $ScriptDir "count-threads.py"
 
 $Source = (Resolve-Path $Source).Path.TrimEnd('\')
 $Dest = (Resolve-Path $Destination).Path.TrimEnd('\')
-
-function Encode-FolderUri {
-    param([string]$Path)
-    $normalized = $Path -replace '\\', '/'
-    $encoded = [uri]::EscapeDataString($normalized).Replace('%3A', ':')
-    return "file:///$encoded"
-}
 
 function Normalize-FsPath {
     param([string]$Path)
@@ -57,6 +50,11 @@ function Find-WorkspaceHash {
         } catch { }
     }
     return $null
+}
+
+function Test-UriPointsTo {
+    param([string]$Uri, [string]$FolderPath)
+    return ((Normalize-FsPath $Uri) -ieq $FolderPath.TrimEnd('\'))
 }
 
 function Get-ExpectedSlug {
@@ -135,8 +133,8 @@ if ($destWs) {
     $wsDb = Join-Path $env:APPDATA "Cursor\User\workspaceStorage\$($destWs.Hash)\state.vscdb"
     Test-Check "workspaceStorage hash exists" $true "hash=$($destWs.Hash)"
     Test-Check "workspace state.vscdb exists" (Test-Path $wsDb) $wsDb
-    $destBasename = Split-Path $Dest -Leaf
-    $uriOk = (Normalize-FsPath $destWs.Uri -ieq $Dest) -or ($destWs.Uri -like "*$destBasename*")
+    # Full-path match only: a basename match would accept C:\a\app for D:\b\app
+    $uriOk = Test-UriPointsTo $destWs.Uri $Dest
     Test-Check "workspace.json points to dest" $uriOk $destWs.Uri
 } else {
     Test-Check "workspaceStorage hash exists" $false "not found for $Dest"
