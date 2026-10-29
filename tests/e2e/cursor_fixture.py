@@ -83,7 +83,13 @@ def make(src: str, dst: str) -> None:
     src_file = src + "\\README.md"
     make_db(ws_root / OLD_WS / "state.vscdb", {
         "memento/workbench.editors": json.dumps({"files": [src_file, vscode_uri(src) + "/README.md"]}),
-        "workbench.panel.chat": json.dumps({"workspace": OLD_WS}),
+        # Old hash inside JSON (value, key, delimited) plus a longer token that must stay
+        "workbench.panel.chat": json.dumps({
+            "workspace": OLD_WS,
+            "byWorkspace": {OLD_WS: {"open": True}},
+            "ref": f"ws:{OLD_WS}",
+            "decoy": OLD_WS + "0",
+        }),
     })
     make_db(ws_root / NEW_WS / "state.vscdb", {"memento/fresh": "{}"})
     make_db(ws_root / OTHER_WS / "state.vscdb", {"memento/other": "{}"})

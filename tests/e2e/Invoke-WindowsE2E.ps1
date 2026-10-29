@@ -176,6 +176,11 @@ $items = ($newWsState.items | ConvertTo-Json -Compress -Depth 5)
 Assert-That "new workspace state.vscdb copied from old (has editor memento)" ($items -match 'workbench\.editors')
 Assert-That "new workspace state.vscdb mentions dest path" ($items -match [regex]::Escape('b\\\\app\\\\README.md'))
 Assert-That "new workspace state.vscdb no longer mentions source path" ($items -notmatch [regex]::Escape('a\\\\app') -and $items -notmatch 'cwm-test/a/app')
+$chat = $newWsState.items.'workbench.panel.chat' | ConvertFrom-Json
+Assert-That "old workspace hash inside JSON value replaced" ($chat.workspace -ceq $NewWs -and $chat.ref -ceq "ws:$NewWs") "workspace=$($chat.workspace) ref=$($chat.ref)"
+Assert-That "old workspace hash as JSON key replaced" ((@($chat.byWorkspace.PSObject.Properties.Name) -join ',') -ceq $NewWs) "keys=$(@($chat.byWorkspace.PSObject.Properties.Name) -join ',')"
+Assert-That "longer token containing the hash left alone" ($chat.decoy -ceq "$($OldWs)0") "decoy=$($chat.decoy)"
+Assert-That "new workspace state.vscdb has no standalone old hash" (-not ($newWsState.items.PSObject.Properties.Value | Where-Object { $_ -match "(?<![0-9A-Za-z])$OldWs(?![0-9A-Za-z])" }))
 Assert-That "old workspace.json still points at source" ($state.workspaces.$OldWs.folder -ceq 'file:///c%3A/cwm-test/a/app')
 
 # --- Case 4: verify-migration.ps1 ------------------------------------------

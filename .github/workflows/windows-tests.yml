@@ -38,6 +38,13 @@ jobs:
           }
           Get-Module -ListAvailable Pester | Format-Table Name, Version, Path -AutoSize
 
+      - name: Python unit tests (remap-cursor-meta.py)
+        run: |
+          # unittest reports on stderr; keep 5.1 from treating that as an error
+          $ErrorActionPreference = 'Continue'
+          python -m unittest discover -s tests -p "test_*.py" -v 2>&1 | ForEach-Object { "$_" }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Pester (tests/project-slug.Tests.ps1)
         run: |
           Import-Module Pester -MinimumVersion 5.5.0
